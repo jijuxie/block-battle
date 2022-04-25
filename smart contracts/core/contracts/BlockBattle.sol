@@ -77,11 +77,14 @@ contract BlockBattle is ERC721, Pausable, Ownable {
         require(!noNomalTransfar,'no nomal trans');
         super.safeTransferFrom(from, to, tokenId, _data);
     }
-    function loot(uint256 tokenId) public  payable {
+    function loot(uint256 tokenId,uint256 color) public whenNotPaused  payable {
         require(mintedTokens[tokenId]==1,'the nft have not be minted');
         require(msg.value==tokensFee[tokenId]*upTimes,' need enough of fee');
+        require(checkColor(color),'the color can not use');
         payable(ownerOf(tokenId)).transfer(tokensFee[tokenId]*(upTimes-1)*(1-managerFee100/100)+tokensFee[tokenId]);
         payable(owner()).transfer(tokensFee[tokenId]*(upTimes-1)*(managerFee100/100));
+        tokensFee[tokenId]=tokensFee[tokenId]*upTimes;
+        tokensColor[tokenId]=color;
         _approve(msg.sender, tokenId);
         _transfer(ownerOf(tokenId),msg.sender,tokenId);
     }
@@ -99,5 +102,11 @@ contract BlockBattle is ERC721, Pausable, Ownable {
         res[4]=tokensFee[tokenId];
         res[5]=uint256(mintedTokens[tokenId]);
         return res;
+    }
+    function getTokensFee() public view returns(uint256[] memory){
+        return tokensFee;
+    }
+    function getTokensColor() public view returns(uint256[] memory){
+        return tokensColor;
     }
 }
