@@ -12,45 +12,19 @@
         <el-row>
           <el-col :span="24">
             <div>
-              <h1>哈希选奖（币安测试网）</h1>
-              <p>每个回合分为四个阶段，未开启阶段，开启阶段，停止投注等待开奖阶段，结束阶段</p>
-              <p>在每个回合的开启阶段玩家可以下注，每次的下注额度为{{ betFee }}BNB</p>
-              <p>在每个回合最多下注{{ maxPlayersOneTurn }}人次，可重复下注</p>
-              <p>在每个回合下注人次满后立刻跨过等待开奖阶段立即开奖，<br>利用标准hash算法得出hash值然后按下注数取余算出中奖人是谁</p>
-              <p>或者在每个回合下注人次未满时，由管理员控制进入停止头猪等待开奖阶段</p>
-              <p>如果再停止下注等待开奖阶段，则任何人可以控制开奖</p>
-              <p>在每个回合中奖人出现后将奖池中的所有金额给予中奖人（扣除管理费用{{ loudFee }}%）</p>
-              <p>在每个回合开奖之后立刻进入结束阶段，并且新的回合由未开启阶段进入开启阶段</p>
+              <h1>BlockBattle（币安测试网）</h1>
+              <p>下方的画布为{{maxRow}}单位乘以{{maxCol}}单位大小</p>
+              <p>每个单位的块为一个NFT</p>
+              <p>每个没有主人的NFT玩家可以支付{{ethers.utils.formatEther(mintFee)}}BNB铸造，并且给予此nft一个颜色</p>
+              <p>所有的nft不可随意转让，但是可以抢夺他人的nft</p>
+              <p>抢夺他人的nft需要支付被抢夺玩家铸造或者抢夺费用的{{upTimes}}倍,并且给予此nft一个颜色</p>
+              <p>被抢夺者会获得{{(upTimes-(upTimes-1)*managerFee100/100).toFixed(4)}}倍的补偿</p>
             </div>
           </el-col>
 
         </el-row>
-        <el-row v-for="(oneTurn,index) in allTurnsData " :key="index">
-          <el-col style="background-color:#66CCFF;">
-            <h3>第{{ allTurnsData.length - index }}回合（当前阶段：{{ actionsToMessage(oneTurn.action) }}）</h3>
-            <el-col :span="12" style="background-color:#9999FF;">
-              <div>
-                <h5>玩家下注工具</h5>
-                <el-button @click="bet(allTurnsData.length- index-1)" v-if="oneTurn.action===1">下注</el-button>
-                <el-button @click="openAward()" v-if="oneTurn.action===2">开奖</el-button>
-              </div>
-            </el-col>
-            <el-col :span="12" style="background-color:#CC99FF;">
-              <div>
-                <h5>管理员工具</h5>
-                <el-button @click="overBet(allTurnsData.length- index-1)" v-if="oneTurn.action===1">结束下注阶段</el-button>
-              </div>
-            </el-col>
-            <el-col>
-              <p>开奖hash：{{ oneTurn.hash }}</p>
-              <p>参与玩家地址：</p>
-              <p v-for="(player,indexz) in oneTurn.players" :key="indexz">id:{{ indexz }} ,address:{{ player }}</p>
-              <p>总奖金池：{{ oneTurn.totalPool }}</p>
-              <p v-if="oneTurn.winner!=='0x0000000000000000000000000000000000000000'">中奖玩家：id:{{
-                  oneTurn.winerId
-                }}，address:{{ oneTurn.winner }}</p>
-            </el-col>
-          </el-col>
+        <el-row v-if="maxRow&&maxCol">
+
         </el-row>
       </el-main>
       <el-footer>
@@ -68,6 +42,11 @@ export default {
   name: 'app',
   data() {
     return {
+      maxRow:0,
+      maxCol:0,
+      mintFee:0,
+      upTimes:0,
+      managerFee100:0,
       account: '',
       testChainId: '0x61',
       betFee: 0,
@@ -78,18 +57,21 @@ export default {
       allTurnsData: [],
       allTurnsDataDeas: [],
       turn: 0,
-      contractAddress: '0x6Cb392ca7A23244f31A0003D6B25Aebe8594D3c9',
+      ethers:ethers,
+      contractAddress: '0xC1283F9dD5C6c658079927886f616211c85cdfa3',
       rpc: 'https://data-seed-prebsc-2-s3.binance.org:8545/',
-      loading: 1
+      loading: 1,
+      tokensColor:[],
+      tokensFee:[],
     }
   },
   components: {},
   async mounted() {
     this.loading = 0;
-    this.getHashAwardAllDataNew();
+    this.getAllData();
     const that = this;
     setInterval(function () {
-      that.getHashAwardAllDataNew()
+      that.getAllData()
     }, 3000);
   },
   methods: {
@@ -210,91 +192,32 @@ export default {
         console.log(e);
       }
     },
-
-
-    //todo 实际上可以不需要一次加载那么多数据甚至应该在服务器缓存直接读取服务器数据或者改用异步
-    async getHashAwardAllData() {
-      try {
-        const Provider = await new ethers.providers.JsonRpcProvider(this.rpc);
-        const Contract = await new ethers.Contract(this.contractAddress, abi, Provider);
-        this.betFee = ethers.utils.formatEther(await Contract.oneBetFee());
-        this.maxPlayersOneTurn = await Contract.maxPlayersOneTurn();
-        this.loudFee = await Contract.loudFee100();
-        this.nowTurn = await Contract.nowTurn();
-        this.manager = await Contract.manager();
-        this.maxPlayersOneTurn = await Contract.maxPlayersOneTurn();
-        this.pauseData = await Contract.pauseData();
-        for (let i = this.nowTurn; i >= 0; i--) {
-          let oneTurnsData = {};
-          oneTurnsData.action = await Contract.turnsActions(i);
-          oneTurnsData.players = await Contract.getOneturnsPlayers(i);
-          oneTurnsData.winner = await Contract.turnsWinner(i);
-          oneTurnsData.hash = (await Contract.turnsHash(i)).toHexString();
-          oneTurnsData.totalPool = ethers.utils.formatEther(await Contract.turnsTotalPool(i));
-          oneTurnsData.winerId = await Contract.turnsWainnerId(i);
-          if (oneTurnsData.action === 1) {
-            oneTurnsData.canBet = 1;
-          } else {
-            oneTurnsData.canBet = 0;
-          }
-          this.allTurnsData[this.nowTurn - i] = oneTurnsData;
-        }
-        // this.loading = 0;
-      } catch (e) {
-        console.log(e)
-      }
-    },
     //改用异步
-    getHashAwardAllDataNew() {
+    getAllData() {
       const Provider = new ethers.providers.JsonRpcProvider(this.rpc);
       const Contract = new ethers.Contract(this.contractAddress, abi, Provider);
       const that = this;
-      Contract.nowTurn().then(function (nowTurn) {
-        that.nowTurn = nowTurn
-        Contract.oneBetFee().then(function (betFee) {
-          that.betFee = ethers.utils.formatEther(betFee)
-        })
-        Contract.maxPlayersOneTurn().then(function (maxPlayersOneTurn) {
-          that.maxPlayersOneTurn = maxPlayersOneTurn
-        })
-        Contract.loudFee100().then(function (loudFee) {
-          that.loudFee = loudFee
-        })
-        Contract.manager().then(function (manager) {
-          that.manager = manager
-        })
-        Contract.maxPlayersOneTurn().then(function (maxPlayersOneTurn) {
-          that.maxPlayersOneTurn = maxPlayersOneTurn
-        })
-        Contract.pauseData().then(function (pauseData) {
-          that.pauseData = pauseData
-        })
-        for (let i = that.nowTurn; i >= 0; i--) {
-          if (!that.allTurnsData[that.nowTurn - i]) {
-            that.allTurnsData[that.nowTurn - i] = {};
-          }
-          Contract.turnsActions(i).then(function (res) {
-            that.allTurnsData[that.nowTurn - i].action = res
-          })
-          Contract.getOneturnsPlayers(i).then(function (res) {
-            that.allTurnsData[that.nowTurn - i].players = res
-          })
-          Contract.turnsWinner(i).then(function (res) {
-            that.allTurnsData[that.nowTurn - i].winner = res
-          })
-          Contract.turnsHash(i).then(function (res) {
-            that.allTurnsData[that.nowTurn - i].hash = res.toHexString()
-          })
-          Contract.turnsTotalPool(i).then(function (res) {
-            that.allTurnsData[that.nowTurn - i].totalPool = ethers.utils.formatEther(res)
-          })
-          Contract.turnsWainnerId(i).then(function (res) {
-            that.allTurnsData[that.nowTurn - i].winerId = res
-          })
-        }
-
-
-      });
+      Contract.maxRow().then(function (res){
+        that.maxRow=res
+      })
+      Contract.maxCol().then(function (res){
+        that.maxCol=res
+      })
+      Contract.mintFee().then(function (res){
+        that.mintFee=res
+      })
+      Contract.upTimes().then(function (res){
+        that.upTimes=res
+      })
+      Contract.managerFee100().then(function (res){
+        that.managerFee100=res
+      })
+      Contract.getTokensFee().then(function (res){
+        that.tokensFee=res
+      })
+      Contract.getTokensColor().then(function (res){
+        that.tokensColor=res
+      })
     },
 
 
