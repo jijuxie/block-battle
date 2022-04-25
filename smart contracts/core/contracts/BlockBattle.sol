@@ -8,11 +8,15 @@ contract BlockBattle is ERC721, Pausable, Ownable {
 
     uint256 public maxRow;
     uint256 public maxCol;
-    uint256 mintFee;
-    mapping(uint256 =>uint256[]) tokens;
-    mapping(uint256=>bool) mintedTokens;
-    uint8 managerFee100 ;
-    uint8 upTimes;
+    uint256 public mintFee;
+
+    uint256[] public tokensRow;
+    uint256[] public tokensCol;
+    uint256[] public tokensColor;
+    uint256[] public tokensFee;
+    uint8[] public mintedTokens;//0/1
+    uint8 public managerFee100 ;
+    uint8  public upTimes;
     bool noNomalTransfar;
     constructor() ERC721("BlockBattleToken", "BBT") {
         maxRow=100;
@@ -34,13 +38,16 @@ contract BlockBattle is ERC721, Pausable, Ownable {
         return color<=16777215;
     }
     function mint( uint256 tokenId,uint256 color) public  whenNotPaused payable{
-        require((tokenId<=maxRow*maxCol-1)&&!mintedTokens[tokenId],'the Token can not  mint');
+        require((tokenId<=maxRow*maxCol-1)&&mintedTokens[tokenId]!=1,'the Token can not  mint');
         require(checkColor(color),'the color can not use');
         require(msg.value==mintFee,'mintFee error');
         _safeMint(msg.sender, tokenId);
 
-        tokens[tokenId]=[uint(tokenId/maxCol),tokenId%maxCol,color,mintFee];
-        mintedTokens[tokenId]=true;
+        tokensRow[tokenId]=uint(tokenId/maxCol);
+        tokensCol[tokenId]=tokenId%maxCol;
+        tokensColor[tokenId]=color;
+        tokensFee[tokenId]=mintFee;
+        mintedTokens[tokenId]=1;
         payable(owner()).transfer(mintFee);
 
     }
@@ -71,10 +78,10 @@ contract BlockBattle is ERC721, Pausable, Ownable {
         super.safeTransferFrom(from, to, tokenId, _data);
     }
     function loot(uint256 tokenId) public  payable {
-        require(mintedTokens[tokenId],'the nft have not be minted');
-        require(msg.value==tokens[tokenId][3]*upTimes,' need enough of fee');
-        payable(ownerOf(tokenId)).transfer(tokens[tokenId][3]*(upTimes-1)*(1-managerFee100/100)+tokens[tokenId][3]);
-        payable(owner()).transfer(tokens[tokenId][3]*(upTimes-1)*(managerFee100/100));
+        require(mintedTokens[tokenId]==1,'the nft have not be minted');
+        require(msg.value==tokensFee[tokenId]*upTimes,' need enough of fee');
+        payable(ownerOf(tokenId)).transfer(tokensFee[tokenId]*(upTimes-1)*(1-managerFee100/100)+tokensFee[tokenId]);
+        payable(owner()).transfer(tokensFee[tokenId]*(upTimes-1)*(managerFee100/100));
         _approve(msg.sender, tokenId);
         _transfer(ownerOf(tokenId),msg.sender,tokenId);
     }
@@ -83,7 +90,14 @@ contract BlockBattle is ERC721, Pausable, Ownable {
     view
     returns (uint256[] memory)
     {
-        require(mintedTokens[tokenId],'the nft have not be minted');
-        return tokens[tokenId];
+        require(mintedTokens[tokenId]==1,'the nft have not be minted');
+        uint256[] memory res;
+        res[0]=tokenId;
+        res[1]=tokensRow[tokenId];
+        res[2]=tokensCol[tokenId];
+        res[3]=tokensColor[tokenId];
+        res[4]=tokensFee[tokenId];
+        res[5]=uint256(mintedTokens[tokenId]);
+        return res;
     }
 }
