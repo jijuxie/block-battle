@@ -3,9 +3,9 @@ import App from './App.vue'
 import router from './router'
 import store from './store'
 import './plugins/element.js'
-
+import vcolorpicker from 'vcolorpicker'
 Vue.config.productionTip = false
-
+Vue.use(vcolorpicker)
 new Vue({
   router,
   store,
