@@ -8,7 +8,7 @@
       <el-header style="background-color:#00FFFF;">
         <el-button type="warning" round @click="linkAccount()">{{ linkMessage() }}</el-button>
       </el-header>
-      <el-main v-if="!loading">
+      <el-main >
         <el-row>
           <el-col :span="24">
             <div>
@@ -23,7 +23,7 @@
           </el-col>
 
         </el-row>
-        <el-row v-if="maxRow&&maxCol&&myTokens"
+        <el-row v-if="init"
                 style=" height: 1000px; width: 1000px; margin-left: auto;margin-right: auto; overflow: hidden;background-color:#f3a3a3; display: flex;flex-wrap: wrap">
           <el-popover v-for="(block ,index) in allBlock" :key="index"
                       placement="top"
@@ -32,13 +32,13 @@
 
             <h2>#{{ index }}</h2>
             <h5>nft信息：</h5>
-            <p>拥有者：{{ block.address ? block.address : '本nft未被铸造' }}</p>
-            <p v-if="block.who!==0">抢夺所需价格：{{ethers.utils.formatEther(block.fee*upTimes)}}</p>
+            <p>拥有者：{{ block.who ? block.address?block.address:'查询中，请等待' : '本nft未被铸造' }}</p>
+            <p v-if="block.who!==0">抢夺所需价格：{{ ethers.utils.formatEther(block.fee.mul(upTimes)) }}</p>
             <p>点击选择颜色：
               <colorPicker v-model="color"/>
             </p>
 
-            <div style="text-align: right; margin: 0">
+            <div style="text-align: right; margin: 0" >
               <el-button v-if="block.who===0" size="mini" type="primary" @click="mint(index)">铸造</el-button>
               <el-button v-if="block.who!==0" type="danger" size="mini" @click="loot(index,block.fee)">抢夺</el-button>
             </div>
@@ -94,7 +94,7 @@ export default {
       account: '',
       testChainId: '0x61',
       ethers: ethers,
-      contractAddress: '0xB05b8Af078722D8D85d853DbDFeb08a71Ab4f0ff',
+      contractAddress: '0x8a03307d18bD37Eee3556C4eB55298EcEc2EAaC7',
       rpc: 'https://data-seed-prebsc-2-s3.binance.org:8545/',
       loading: 1,
       tokensColor: [],
@@ -106,26 +106,29 @@ export default {
       blockItems: 100,
       allBlock: [],
       myTokens: [],
+      init:0,
     }
   },
   components: {},
   async mounted() {
     this.loading = 0;
+    this.linkAccount()
     this.getAllData();
     const that = this;
     setInterval(function () {
       that.getAllData()
+      that.reAllBlockAddress()
     }, 3000);
   },
   methods: {
     async mint(index) {
-      if(!this.checkChainId()){
+      if (!this.checkChainId()) {
         return;
       }
-      if(!this.checkAccount()){
+      if (!this.checkAccount()) {
         return;
       }
-      this.loading = 0;
+      this.loading = 1;
       this.loadingMessage = '正在铸造，请稍后。。。。'
 
 
@@ -133,8 +136,7 @@ export default {
         const Provider = await new ethers.providers.Web3Provider(window.ethereum)
         const signer = Provider.getSigner()
         const Contract = await new ethers.Contract(this.contractAddress, abi, signer);
-        // console.log()
-        let tx = await Contract.mint(index, '0x'+this.color.substring(6),
+        let tx = await Contract.mint(index, '0x' + this.color.substring(1),
             {
               value: this.mintFee,
               gasLimit: 500000,
@@ -161,37 +163,37 @@ export default {
           type: 'error'
         });
       }
-      this.loading = 1;
+      this.loading = 0;
     },
-    async loot(index,fee) {
-      if(!this.checkChainId()){
+    async loot(index, fee) {
+      if (!this.checkChainId()) {
         return;
       }
-      if(!this.checkAccount()){
+      if (!this.checkAccount()) {
         return;
       }
       const Provider = await new ethers.providers.Web3Provider(window.ethereum)
       const signer = Provider.getSigner()
       const Contract = await new ethers.Contract(this.contractAddress, abi, signer);
-      this.loading = 0;
+      this.loading = 1;
       this.loadingMessage = '正在抢夺，请稍后。。。。'
       try {
-        let tx = await Contract.loot(index, parseInt(this.color, 10),
+        let tx = await Contract.loot(index, '0x' + this.color.substring(1),
             {
-              value:  fee.mul(this.upTimes),
+              value: fee.mul(this.upTimes),
               gasLimit: 500000,
               gasPrice: await Provider.getGasPrice()
             }
         );
         let res = await tx.wait();
         if (res.status === 1) {
-          this.loading = 1;
+          this.loading = 0;
           this.$message({
             message: '抢夺成功！',
             type: 'success'
           });
         } else {
-          this.loading = 1;
+          this.loading = 0;
           this.$message({
             message: '抢夺失败，请检查数据，或者有人抢先铸造',
             type: 'error'
@@ -199,8 +201,7 @@ export default {
         }
 
       } catch (e) {
-        console.log(e)
-        this.loading = 1;
+        this.loading = 0;
         this.$message({
           message: '抢夺失败，请检查数据，或者有人抢先铸造',
           type: 'error'
@@ -255,14 +256,29 @@ export default {
       }
 
       Contract.getTokensFee().then(function (res) {
-        that.tokensFee = res
+
+        for (let i = 0; i < res.length; i = i + 2) {
+          that.tokensFee[res[i]] = res[i + 1]
+        }
 
       })
+
+      if(that.account){
+        Contract.getMyTokens(that.account).then(function (res) {
+
+          for(let i=0;i<res.length;i++){
+            that.myTokens[i]=res[i].toNumber()-1;
+          }
+        })
+      }
       Contract.getTokensColor().then(function (res) {
-        that.tokensColor = res
-      })
-      Contract.getMyTokens().then(function (res) {
-        that.myTokens = res
+        console.log(res)
+        for (let i = 0; i < res.length; i = i + 2) {
+          console.log(res[i].toNumber())
+          console.log(res[i + 1])
+          console.log(res[i + 1].toNumber())
+          that.tokensColor[res[i].toNumber()] = res[i + 1].toNumber()
+        }
         that.reAllBlock()
       })
     },
@@ -271,22 +287,46 @@ export default {
       rgb[0] = (argb & 0xff0000) >> 16;
       rgb[1] = (argb & 0xff00) >> 8;
       rgb[2] = (argb & 0xff);
+
       return "rgb(" + rgb[0] + "," + rgb[1] + "," + rgb[2] + ")";
+    },
+    async reAllBlockAddress() {
+      const Provider = new ethers.providers.JsonRpcProvider(this.rpc);
+      const Contract = new ethers.Contract(this.contractAddress, abi, Provider);
+      const that = this;
+      for(let i=0; i<this.allBlock.length;i++){
+        if(this.allBlock[i].fee){
+          Contract.tokensOwner(i).then(function (res) {
+            that.allBlock[i].address=res
+          })
+        }
+      }
     },
     reAllBlock() {
       if (this.maxRow && this.maxCol && this.tokensFee && this.tokensColor) {
         for (let x = 0; x < this.maxRow; x++) {
           for (let y = 0; y < this.maxRow; y++) {
             if (!this.allBlock[this.maxRow * x + y]) {
-              this.allBlock[this.maxRow * x + y] = {}
+              let theBlock={};
+              theBlock.row = x;
+              theBlock.col = y;
+              theBlock.color = this.tokensColor[this.maxRow * x + y] ? this.tokensColor[this.maxRow * x + y] : 0;
+              theBlock.fee = this.tokensFee[this.maxRow * x + y] ? this.tokensFee[this.maxRow * x + y] : 0;
+              theBlock.who = theBlock.fee ? (this.myTokens.indexOf(this.maxRow * x + y)!==-1)  ? 2 : 1 : 0;
+              this.allBlock.push(theBlock);
+            }else{
+              this.allBlock[this.maxRow * x + y].row = x;
+              this.allBlock[this.maxRow * x + y].col = y;
+              this.allBlock[this.maxRow * x + y].color = this.tokensColor[this.maxRow * x + y] ? this.tokensColor[this.maxRow * x + y] : 0;
+              this.allBlock[this.maxRow * x + y].fee = this.tokensFee[this.maxRow * x + y] ? this.tokensFee[this.maxRow * x + y] : 0;
+              this.allBlock[this.maxRow * x + y].who = this.allBlock[this.maxRow * x + y].fee ? (this.myTokens.indexOf((this.maxRow * x + y))!==-1) ? 2 : 1 : 0;
             }
-            this.allBlock[this.maxRow * x + y].row = x;
-            this.allBlock[this.maxRow * x + y].col = y;
-            this.allBlock[this.maxRow * x + y].color = this.tokensColor[this.maxRow * x + y] ? this.tokensColor[this.maxRow * x + y] : 0;
-            this.allBlock[this.maxRow * x + y].fee = this.tokensFee[this.maxRow * x + y] ? this.tokensFee[this.maxRow * x + y] : 0;
-            this.allBlock[this.maxRow * x + y].who = this.allBlock[this.maxRow * x + y].fee ? this.myTokens[this.maxRow * x + y] ? 2 : 1 : 0;
+
           }
         }
+
+        this.init=1;
+
       }
     }
     ,
@@ -296,9 +336,7 @@ export default {
     ,
     linkAccount: async function () {
       if (typeof window.ethereum !== 'undefined') {
-        console.log('MetaMask is installed!');
         this.account = (await window.ethereum.request({method: 'eth_requestAccounts'}))[0];
-        console.log(this.account)
         this.checkChainId()
       } else {
         this.$message({
@@ -309,7 +347,6 @@ export default {
     }
     ,
     checkChainId: function () {
-      console.log(window.ethereum.chainId)
       if (this.testChainId !== window.ethereum.chainId) {
         this.$message({
           message: '请切换到币安测试链，链id：0x61',

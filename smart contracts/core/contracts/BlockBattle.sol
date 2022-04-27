@@ -11,10 +11,12 @@ contract BlockBattle is ERC721, Pausable, Ownable {
     uint256 public mintFee;
     mapping(uint256=>uint256) public tokensColor;
     mapping(uint256=>uint256) public tokensFee;
+    mapping(uint256=>address) public tokensOwner;
     uint256[] public tokenIds;
     uint8 public managerFee100 ;
     uint8  public upTimes;
     bool noNomalTransfar;
+    address manager;
     constructor() ERC721("BlockBattleToken", "BBT") {
         maxRow=10;
         maxCol=10;
@@ -22,6 +24,7 @@ contract BlockBattle is ERC721, Pausable, Ownable {
         managerFee100=20;
         upTimes=2;//>1
         noNomalTransfar=true ;//only true
+        manager=msg.sender;
     }
 
     function pause() public onlyOwner {
@@ -47,8 +50,9 @@ contract BlockBattle is ERC721, Pausable, Ownable {
         _safeMint(msg.sender, tokenId);
         tokensColor[tokenId]=color;
         tokensFee[tokenId]=mintFee;
+        tokensOwner[tokenId]=msg.sender;
         tokenIds.push(tokenId);
-        payable(owner()).transfer(mintFee);
+        payable(manager).transfer(mintFee);
 
     }
     function _beforeTokenTransfer(address from, address to, uint256 tokenId)
@@ -89,9 +93,10 @@ contract BlockBattle is ERC721, Pausable, Ownable {
         require(msg.value==tokensFee[tokenId]*upTimes,' need enough of fee');
         require(checkColor(color),'the color can not use');
         payable(ownerOf(tokenId)).transfer(tokensFee[tokenId]*(upTimes-1)*(1-managerFee100/100)+tokensFee[tokenId]);
-        payable(owner()).transfer(tokensFee[tokenId]*(upTimes-1)*(managerFee100/100));
+        payable(manager).transfer(tokensFee[tokenId]*(upTimes-1)*(managerFee100/100));
         tokensFee[tokenId]=tokensFee[tokenId]*upTimes;
         tokensColor[tokenId]=color;
+        tokensOwner[tokenId]=msg.sender;
         _approve(msg.sender, tokenId);
         _transfer(ownerOf(tokenId),msg.sender,tokenId);
     }
@@ -125,8 +130,8 @@ contract BlockBattle is ERC721, Pausable, Ownable {
         //溢出风险但是不大
         uint256[]  memory  reTokenFee=new uint256[](tokenIds.length*2);
         for( uint256 i=0;i<tokenIds.length;i++){
-            reTokenFee[2*i]=i;
-            reTokenFee[2*i+1]=tokensFee[i];
+            reTokenFee[2*i]=tokenIds[i];
+            reTokenFee[2*i+1]=tokensFee[tokenIds[i]];
 
         }
         return reTokenFee;
@@ -136,12 +141,33 @@ contract BlockBattle is ERC721, Pausable, Ownable {
 
         uint256[]  memory  reTokensColor=new uint256[](tokenIds.length*2);
         for( uint256 i=0;i<tokenIds.length;i++){
-            reTokensColor[2*i]=i;
-            reTokensColor[2*i+1]=tokensColor[i];
+            reTokensColor[2*i]=tokenIds[i];
+            reTokensColor[2*i+1]=tokensColor[tokenIds[i]];
         }
         return reTokensColor;
     }
     function mintedTokenIds() public view returns (uint256[] memory){
         return tokenIds;
+    }
+    function getMyTokens(address myAddress) public view returns(uint256[] memory){
+        uint256  countMyTokens;
+        for( uint256 i=0;i<tokenIds.length;i++){
+            if(tokensOwner[tokenIds[i]]==myAddress){
+                countMyTokens++;
+            }
+
+        }
+
+        uint256[]  memory  _tokenIds=new uint256[](countMyTokens);
+        uint256 index=0;
+        for( uint256 i=0;i<tokenIds.length;i++){
+            if(tokensOwner[tokenIds[i]]==myAddress){
+                //+1好计算
+                _tokenIds[index]=tokenIds[i]+1;
+                index++;
+            }
+
+        }
+        return _tokenIds;
     }
 }
